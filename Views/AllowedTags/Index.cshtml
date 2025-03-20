@@ -1,0 +1,204 @@
+﻿@{
+    ViewData["Title"] = "Manage Allowed Tags";
+}
+
+<style>
+    body {
+        background-color: #121212;
+        color: #ffffff;
+        font-family: Arial, sans-serif;
+    }
+
+    .container {
+        max-width: 600px;
+        margin: auto;
+        background-color: #1e1e1e;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0px 0px 10px rgba(255, 255, 255, 0.1);
+    }
+
+    h2 {
+        text-align: center;
+    }
+
+    input, button {
+        width: 100%;
+        padding: 10px;
+        margin-bottom: 10px;
+        background-color: #333;
+        color: #fff;
+        border: 1px solid #555;
+        border-radius: 5px;
+    }
+
+    button {
+        cursor: pointer;
+        background-color: #007BFF;
+        border: none;
+    }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+    }
+
+    th, td {
+        padding: 10px;
+        text-align: left;
+        border-bottom: 1px solid #444;
+    }
+
+    th {
+        background-color: #222;
+    }
+
+    tr:nth-child(even) {
+        background-color: #2a2a2a;
+    }
+
+    tr:hover {
+        background-color: #333;
+    }
+
+    .delete-btn {
+        background-color: red;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        cursor: pointer;
+        border-radius: 5px;
+    }
+
+        .delete-btn:hover {
+            background-color: darkred;
+        }
+</style>
+
+<div class="container">
+    <h2>Manage Allowed Tags</h2>
+
+    <!-- Input for new tag and Add button -->
+    <input type="text" id="newTag" placeholder="Enter EPC..." />
+    <button id="addTagBtn">Add Tag</button>
+
+    <!-- Table to display allowed tags -->
+    <table id="allowedTagsTable">
+        <thead>
+            <tr>
+                <th>EPC (Tag ID)</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<!-- SignalR and JavaScript for API calls and real-time updates -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/5.0.11/signalr.min.js"></script>
+<script>
+    let connection;
+
+    function startSignalRConnection() {
+        connection = new signalR.HubConnectionBuilder().withUrl("/rfidhub").build();
+
+        connection.start()
+            .then(() => {
+                console.log("Connected to SignalR");
+                loadAllowedTags();  // Load data immediately
+            })
+            .catch(err => console.error("SignalR Connection Error:", err));
+
+        // Handle unexpected disconnections & attempt reconnect
+        connection.onclose(() => {
+            console.warn("SignalR Disconnected! Reconnecting...");
+            setTimeout(startSignalRConnection, 5000); // Retry after 5 seconds
+        });
+
+        // Listen for real-time updates
+        connection.on("AllowedTagsUpdated", (data) => {
+            console.log("Real-time update received:", data);
+            updateTagTable(data);
+        });
+    }
+
+    // Load allowed tags from API
+    function loadAllowedTags() {
+        fetch('/api/allowed-tags')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error("Failed to fetch allowed tags.");
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log("Fetched allowed tags:", data);
+                updateTagTable(data);
+            })
+            .catch(error => console.error("Error fetching allowed tags:", error));
+    }
+
+    // Update the allowed tags table
+    function updateTagTable(tags) {
+        const tableBody = document.querySelector("#allowedTagsTable tbody");
+        tableBody.innerHTML = "";
+
+        tags.forEach(tag => {
+            const row = `
+                    <tr>
+                        <td>${tag}</td>
+                        <td>
+                            <button class="delete-btn" onclick="removeTag('${tag}')">Remove</button>
+                        </td>
+                    </tr>`;
+            tableBody.innerHTML += row;
+        });
+    }
+
+    // Add a new allowed tag
+    document.getElementById("addTagBtn").addEventListener("click", function () {
+        const newTag = document.getElementById("newTag").value.trim();
+        if (!newTag) {
+            alert("Please enter a valid EPC.");
+            return;
+        }
+
+        fetch('/api/allowed-tags/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newTag)
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error("Failed to add new tag.");
+                }
+                alert("Tag added successfully!");
+                document.getElementById("newTag").value = "";
+                loadAllowedTags(); // Refresh after adding
+            })
+            .catch(error => console.error("Error adding tag:", error));
+    });
+
+    // Remove an allowed tag
+    function removeTag(tag) {
+        if (!confirm(`Are you sure you want to remove the tag "${tag}"?`)) return;
+
+        fetch(`/api/allowed-tags/remove?epc=${tag}`, { method: 'DELETE' })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error("Failed to remove tag.");
+                }
+                alert("Tag removed successfully!");
+                loadAllowedTags(); // Refresh after removing
+            })
+            .catch(error => console.error("Error removing tag:", error));
+    }
+
+    // Initialize SignalR and load tags
+    startSignalRConnection();
+</script>

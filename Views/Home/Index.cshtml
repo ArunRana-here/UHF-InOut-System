@@ -1,0 +1,144 @@
+﻿@{
+    ViewData["Title"] = "RFID Dashboard";
+}
+
+<style>
+    body {
+        background-color: #121212;
+        color: #ffffff;
+        font-family: Arial, sans-serif;
+    }
+    
+    h2 {
+        text-align: center;
+        margin-bottom: 20px;
+    }
+
+    .container {
+        max-width: 800px;
+        margin: auto;
+        background-color: #1e1e1e;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0px 0px 10px rgba(255, 255, 255, 0.1);
+    }
+
+    input {
+        width: 100%;
+        padding: 8px;
+        margin-bottom: 10px;
+        background-color: #333;
+        color: #fff;
+        border: 1px solid #555;
+        border-radius: 5px;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+    }
+
+    th, td {
+        padding: 10px;
+        text-align: left;
+        border-bottom: 1px solid #444;
+    }
+
+    th {
+        background-color: #222;
+    }
+
+    tr:nth-child(even) {
+        background-color: #2a2a2a;
+    }
+
+    tr:hover {
+        background-color: #333;
+    }
+
+    .status-in {
+        color: limegreen;
+        font-weight: bold;
+    }
+
+    .status-out {
+        color: red;
+        font-weight: bold;
+    }
+
+    #clearHistory {
+        width: 100%;
+        padding: 10px;
+        margin-top: 10px;
+        background-color: red;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+        #clearHistory:hover {
+            background-color: darkred;
+        }
+
+</style>
+
+<div class="container">
+    <h2> IN/OUT Tracker</h2>
+
+    <input type="text" id="search" placeholder="Search EPC..." />
+
+    <table id="tagTable">
+        <thead>
+            <tr>
+                <th>EPC (Tag ID)</th>
+                <th>Read Count</th>
+                <th>Status</th>
+                <th>Timestamp</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <button id="clearHistory">Clear History</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/5.0.11/signalr.min.js"></script>
+<script>
+    const connection = new signalR.HubConnectionBuilder().withUrl("/rfidhub").build();
+
+    connection.start().then(() => console.log("Connected to SignalR"));
+
+    connection.on("ReceiveData", function (data) {
+        let tableBody = document.querySelector("#tagTable tbody");
+        tableBody.innerHTML = ""; // Clear table before updating
+
+        data.forEach(tag => {
+            let row = document.createElement("tr");
+            row.innerHTML = `
+                    <td>${tag.epc}</td>
+                    <td>${tag.readCount}</td>
+                    <td class="${tag.status === 'IN' ? 'status-in' : 'status-out'}">${tag.status}</td>
+                    <td>${new Date(tag.timestamp).toLocaleString()}</td>
+                `;
+            tableBody.prepend(row); // Add new data at the top
+        });
+    });
+
+    document.getElementById("clearHistory").addEventListener("click", function () {
+        fetch('/api/reader/clear', { method: 'POST' })
+            .then(() => {
+                document.querySelector("#tagTable tbody").innerHTML = ""; // Clear UI
+                alert("History cleared!");
+            });
+    });
+
+    document.getElementById("search").addEventListener("input", function () {
+        let value = this.value.toLowerCase();
+        let rows = document.querySelectorAll("#tagTable tbody tr");
+        rows.forEach(row => {
+            row.style.display = row.innerText.toLowerCase().includes(value) ? "" : "none";
+        });
+    });
+</script>
